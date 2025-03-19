@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.optimize import approx_fprime
 plt.rcParams['font.family'] = ['Arial']
 plt.rcParams['font.size'] = 14
 
@@ -213,15 +214,15 @@ class DeadReckoning(Estimator):
             x_prev = self.x_hat[-1]
             u_prev = self.u[-1]
 
-            self.B = np.array([x_prev[3],x_prev[4],x_prev[5],0,-self.gr,0])
-            self.C = np.array([[0,0],
+            self.Bd = np.array([x_prev[3],x_prev[4],x_prev[5],0,-self.gr,0])
+            self.Cd = np.array([[0,0],
                                [0,0],
                                [0,0],
                                [-np.sin(x_prev[2])/self.m,0],
                                [np.cos(x_prev[2])/self.m,0],
                                [0,1/self.J]])
               
-            x_pred = x_prev + self.dt * (self.B + self.C @ u_prev)
+            x_pred = x_prev + self.dt * (self.Bd + self.Cd @ u_prev)
 
             self.x_hat.append(x_pred)
 
@@ -258,28 +259,88 @@ class ExtendedKalmanFilter(Estimator):
         self.canvas_title = 'Extended Kalman Filter'
         # TODO: Your implementation goes here!
         # You may define the Q, R, and P matrices below.
-        self.A = None
-        self.B = None
-        self.C = None
-        self.Q = np.eye(6)
-        self.R = np.eye(3)
+        
+        self.Q = np.eye(6) 
+        self.R = np.eye(2) * 100
         self.P = np.eye(6)
+        self.xL = 0
+        self.yL = 5
+        self.zL = 5
 
     # noinspection DuplicatedCode
     def update(self, i):
         if len(self.x_hat) > 0: #and self.x_hat[-1][0] < self.x[-1][0]:
             # TODO: Your implementation goes here!
             # You may use self.u, self.y, and self.x[0] for estimation
-            raise NotImplementedError
+
+            #process data
+            u_prev = np.array(self.u[-1])
+            x_prev = np.array(self.x_hat[-1])
+            y_mea = np.array(self.y[-1])
+
+            # prediction -- state
+            x_pred = self.g(self.x_hat[-1],self.u[-1])
+
+            # prediction -- variance
+            self.A = self.approx_A(x_prev, u_prev)
+            P_pred = self.A @ self.P @ self.A.T + self.Q
+
+            # Kalman gain calculation
+            self.C = self.approx_C(x_pred)
+            K = P_pred @ self.C.T @ np.linalg.inv(self.C @ P_pred @ self.C.T + self.R)
+
+            # update -- state
+            X_mea = x_pred + K @ (y_mea - self.h(x_pred, y_mea))
+
+            # update -- variance
+            P_mea = P_pred - K @ self.C @ P_pred
+
+            self.x_hat.append(X_mea)
+            self.P = P_mea
+            # raise NotImplementedError
 
     def g(self, x, u):
-        raise NotImplementedError
+            self.Bd = np.array([x[3],x[4],x[5],0,-self.gr,0])
+            self.Cd = np.array([[0,0],
+                                [0,0],
+                                [0,0],
+                                [-np.sin(x[2])/self.m,0],
+                                [np.cos(x[2])/self.m,0],
+                                [0,1/self.J]])
+              
+            return x + self.dt * (self.Bd + self.Cd @ u)
+        # raise NotImplementedError
 
     def h(self, x, y_obs):
-        raise NotImplementedError
+        dx = self.xL - x[0]
+        dz = self.zL - x[1]
+        r = np.sqrt(dx**2 + self.yL**2 + dz**2)
+        bearing = x[2]
+        return np.array([r, bearing])
+        # raise NotImplementedError
 
     def approx_A(self, x, u):
-        raise NotImplementedError
+        return np.array([[1,0,0,self.dt,0,0],
+                          [0,1,0,0,self.dt,0],
+                          [0,0,1,0,0,self.dt],
+                          [0,0,-self.dt*u[0]*np.cos(x[2])/self.m,1,0,0],
+                          [0,0,-self.dt*u[0]*np.sin(x[2])/self.m,0,1,0],
+                          [0,0,0,0,0,1]])
     
     def approx_C(self, x):
-        raise NotImplementedError
+        # raise NotImplementedError
+        # Use an epsilon based on machine precision for finite differences
+        # epsilon = np.sqrt(np.finfo(float).eps)
+        # jac = np.zeros((2,6))
+        # for i in range(2):
+        #     def f_i(x,i=i):
+        #         return self.h(x, y_mea)[i]
+        #     jac[i, :] = approx_fprime(x, f_i, epsilon)
+        # return jac
+        
+        dx = self.xL - x[0]
+        dz = self.zL - x[1]
+        r = np.sqrt(dx**2 + self.yL**2 + dz**2)
+
+        return np.array([[-dx/r,-dz/r,0,0,0,0],
+                         [0,0,1,0,0,0]])
