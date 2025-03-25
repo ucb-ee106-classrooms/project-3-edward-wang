@@ -19,7 +19,7 @@ def spin(estimator):
         The instance of the estimator
 
     Returns
-    -------
+    ------- 
         None
     """
 

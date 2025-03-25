@@ -1,3 +1,4 @@
+import time 
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.optimize import approx_fprime
@@ -62,8 +63,8 @@ class Estimator:
             [['xz', 'phi'],
              ['xz', 'x'],
              ['xz', 'z']], figsize=(20.0, 10.0))
-        self.ln_xz, = self.axd['xz'].plot([], 'o-g', linewidth=2, label='True')
-        self.ln_xz_hat, = self.axd['xz'].plot([], 'o-c', label='Estimated')
+        self.ln_xz, = self.axd['xz'].plot([], linewidth = 2, label='True')
+        self.ln_xz_hat, = self.axd['xz'].plot([], linewidth=2, label='Estimated')
         self.ln_phi, = self.axd['phi'].plot([], 'o-g', linewidth=2, label='True')
         self.ln_phi_hat, = self.axd['phi'].plot([], 'o-c', label='Estimated')
         self.ln_x, = self.axd['x'].plot([], 'o-g', linewidth=2, label='True')
@@ -92,7 +93,9 @@ class Estimator:
 
 
     def run(self):
+        step_times = []  # To store runtime for each step
         for i, data in enumerate(self.data):
+            step_start = time.perf_counter()  # Start timer
             self.t.append(np.array(data[0]))
             self.x.append(np.array(data[1:7]))
             self.u.append(np.array(data[7:9]))
@@ -101,6 +104,48 @@ class Estimator:
                 self.x_hat.append(self.x[-1])
             else:
                 self.update(i)
+            
+            # compute run time
+            step_end = time.perf_counter()  # End timer
+            elapsed = step_end - step_start
+            step_times.append(elapsed)
+
+        # compute average run time
+        avg_time = sum(step_times) / len(step_times)
+        print(f"Average runtime per step: {avg_time:.10f} seconds")
+        
+        # plot compute time
+        # plt.figure(figsize=(10, 5))
+        # plt.plot(range(len(step_times)), step_times, marker='o', linestyle='-')
+        # plt.xlabel("Timestep")
+        # plt.ylabel("Runtime (s)")
+        # plt.title("Runtime per Timestep for Extended Kalman Filter on Planar Quadrotor")
+        # plt.grid(True)
+        # plt.show()
+
+        # compute tracking error
+        errors = []
+        for true_state, estimated_state in zip(self.x, self.x_hat):
+            # Extracting only the x and z positions (indices 0 and 1)
+            pos_true = np.array(true_state[:2])
+            pos_est = np.array(estimated_state[:2])
+            error = np.linalg.norm(pos_true - pos_est)
+            errors.append(error)
+        avg_error = sum(errors) / len(errors)
+        max_error = max(errors)
+        print(f"Average state error per step: {avg_error:.5f} meters")
+        print(f"Max state error: {max_error:.5f} meters")
+
+        # plot track error
+        plt.figure(figsize=(10, 5))
+        plt.plot(range(len(errors)), errors, marker='o', linestyle='-')
+        plt.xlabel("Timestep")
+        plt.ylabel("coordinate tracking error (m)")
+        plt.title("tracking error for Extended Kalman Filter on Planar Quadrotor")
+        plt.grid(True)
+        plt.show()
+
+
         return self.x_hat
 
     def update(self, _):
@@ -260,7 +305,7 @@ class ExtendedKalmanFilter(Estimator):
         # TODO: Your implementation goes here!
         # You may define the Q, R, and P matrices below.
         
-        self.Q = np.eye(6) 
+        self.Q = np.eye(6)
         self.R = np.eye(2) * 100
         self.P = np.eye(6)
         self.xL = 0
